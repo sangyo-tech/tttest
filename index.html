@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#111111">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Short Video AI - スマホ対応</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; -webkit-touch-callout: none; }
+    html { height: 100%; }
+    body { 
+      margin: 0; padding: 0; height: 100%;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%);
+      overscroll-behavior: none;
+      -webkit-overflow-scrolling: touch;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    #root { min-height: 100%; }
+    button, input, select, textarea { font-size: 16px !important; touch-action: manipulation; }
+    .btn { min-height: 48px; display: flex; align-items: center; justify-content: center; }
+    .btn:active { transform: scale(0.96); opacity: 0.9; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes zoomIn { from { transform: scale(1); } to { transform: scale(1.1); } }
+    @keyframes zoomOut { from { transform: scale(1.1); } to { transform: scale(1); } }
+    @keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+    @keyframes glow { 0%,100% { text-shadow: 0 0 5px currentColor; } 50% { text-shadow: 0 0 20px currentColor; } }
+    @keyframes speaking { 0%,100% { height: 4px; } 50% { height: 16px; } }
+    .anim-fadeIn { animation: fadeIn 0.3s ease-out; }
+    .anim-pulse { animation: pulse 1.5s infinite; }
+    .effect-zoom-in { animation: zoomIn 3s ease-out forwards; }
+    .effect-zoom-out { animation: zoomOut 3s ease-in forwards; }
+    .effect-shake { animation: shake 0.4s infinite; }
+    .effect-bounce { animation: bounce 1s infinite; }
+    .text-glow { animation: glow 1.5s infinite; }
+    .text-bounce { animation: bounce 0.6s infinite; }
+    .speaking-bar { animation: speaking 0.4s ease-in-out infinite; }
+    .filter-bw { filter: grayscale(100%); }
+    .filter-sepia { filter: sepia(80%); }
+    .filter-warm { filter: saturate(130%) hue-rotate(-10deg); }
+    .filter-cool { filter: saturate(110%) hue-rotate(20deg); }
+    .filter-vivid { filter: saturate(150%) contrast(110%); }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { scrollbar-width: none; }
+    input[type="range"] { -webkit-appearance: none; height: 6px; background: rgba(255,255,255,0.2); border-radius: 3px; }
+    input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; background: #f97316; border-radius: 50%; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect } = React;
+
+// 音楽ライブラリ
+const MUSIC = [
+  { id: 'm1', name: 'Happy Pop', mood: '明るい', url: 'https://cdn.pixabay.com/audio/2024/11/04/audio_a98e0c5545.mp3' },
+  { id: 'm2', name: 'Chill Lo-Fi', mood: 'リラックス', url: 'https://cdn.pixabay.com/audio/2024/09/06/audio_c8d6185af9.mp3' },
+  { id: 'm3', name: 'Epic Cinema', mood: '壮大', url: 'https://cdn.pixabay.com/audio/2024/01/22/audio_effbb73da1.mp3' },
+  { id: 'm4', name: 'EDM Energy', mood: 'エネルギッシュ', url: 'https://cdn.pixabay.com/audio/2024/07/19/audio_fc2e3ef3dd.mp3' },
+  { id: 'm5', name: 'Acoustic', mood: '温かい', url: 'https://cdn.pixabay.com/audio/2023/09/05/audio_df59e0babe.mp3' },
+];
+
+// 音声タイプ
+const VOICES = [
+  { id: 'v1', name: '女性', icon: '👩', lang: 'ja-JP' },
+  { id: 'v2', name: '男性', icon: '👨', lang: 'ja-JP' },
+  { id: 'v3', name: '子供', icon: '👧', lang: 'ja-JP' },
+  { id: 'v4', name: 'EN Female', icon: '👩‍💼', lang: 'en-US' },
+];
+
+// 話し方
+const STYLES = [
+  { id: 's1', name: '通常', rate: 1, pitch: 1 },
+  { id: 's2', name: 'ゆっくり', rate: 0.75, pitch: 1 },
+  { id: 's3', name: '早口', rate: 1.3, pitch: 1 },
+  { id: 's4', name: '元気', rate: 1.1, pitch: 1.2 },
+];
+
+// エフェクト
+const EFFECTS = [
+  { id: 'none', name: 'なし', icon: '○' },
+  { id: 'zoom-in', name: 'ズームイン', icon: '🔍' },
+  { id: 'zoom-out', name: 'ズームアウト', icon: '🔎' },
+  { id: 'shake', name: 'シェイク', icon: '📳' },
+  { id: 'bounce', name: 'バウンス', icon: '⬆️' },
+];
+
+// フィルター
+const FILTERS = [
+  { id: 'none', name: 'なし', icon: '🎨' },
+  { id: 'bw', name: 'モノクロ', icon: '⬜' },
+  { id: 'sepia', name: 'セピア', icon: '🟤' },
+  { id: 'warm', name: 'ウォーム', icon: '🔥' },
+  { id: 'cool', name: 'クール', icon: '❄️' },
+  { id: 'vivid', name: 'ビビッド', icon: '✨' },
+];
+
+// ステッカー
+const STICKERS = ['😀','😂','😍','🔥','💯','⭐','✨','💖','👍','🎉','🚀','💪','👑','🎵','📸'];
+
+// スピード
+const SPEEDS = [
+  { id: 0.5, name: '0.5x', icon: '🐢' },
+  { id: 1, name: '1x', icon: '▶️' },
+  { id: 1.5, name: '1.5x', icon: '🚀' },
+  { id: 2, name: '2x', icon: '⚡' },
+];
+
+function App() {
+  const [step, setStep] = useState('upload'); // upload, edit
+  const [files, setFiles] = useState([]);
+  const [scenes, setScenes] = useState([]);
+  const [idx, setIdx] = useState(0);
+  const [tab, setTab] = useState('effect');
+  const [music, setMusic] = useState(null);
+  const [musicVol, setMusicVol] = useState(70);
+  const [playing, setPlaying] = useState(false);
+  const [previewMusic, setPreviewMusic] = useState(null);
+  const [voice, setVoice] = useState(VOICES[0]);
+  const [style, setStyle] = useState(STYLES[0]);
+  const [narrations, setNarrations] = useState({});
+  const [speaking, setSpeaking] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  
+  const fileRef = useRef();
+  const audioRef = useRef();
+  const previewRef = useRef();
+  const timerRef = useRef();
+
+  const scene = scenes[idx];
+  const total = scenes.reduce((s, sc) => s + sc.duration / sc.speed, 0);
+
+  // ファイル追加
+  const onFiles = (e) => {
+    const arr = Array.from(e.target.files).map((f, i) => ({
+      id: `f${Date.now()}-${i}`,
+      url: URL.createObjectURL(f),
+      type: f.type.startsWith('video') ? 'video' : 'image',
+      name: f.name,
+    }));
+    setFiles(p => [...p, ...arr]);
+    setScenes(p => [...p, ...arr.map((m, i) => ({
+      id: `s${Date.now()}-${i}`,
+      media: m,
+      duration: 3,
+      speed: 1,
+      effect: 'none',
+      filter: 'none',
+      text: '',
+      textPos: 'center',
+      textSize: 20,
+      textColor: '#ffffff',
+      textAnim: 'none',
+      stickers: [],
+    }))]);
+    setStep('edit');
+  };
+
+  // シーン更新
+  const update = (key, val) => {
+    setScenes(p => p.map((s, i) => i === idx ? { ...s, [key]: val } : s));
+  };
+
+  // ステッカー追加
+  const addSticker = (emoji) => {
+    const newS = { id: `st${Date.now()}`, emoji, x: 50, y: 30, size: 32 };
+    update('stickers', [...(scene?.stickers || []), newS]);
+  };
+
+  // ナレーション再生
+  const speak = (text) => {
+    if (!text) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = voice.lang;
+    u.rate = style.rate;
+    u.pitch = style.pitch;
+    u.onstart = () => setSpeaking(true);
+    u.onend = () => setSpeaking(false);
+    speechSynthesis.speak(u);
+  };
+
+  // 音楽プレビュー
+  const togglePreview = (m) => {
+    if (previewRef.current) previewRef.current.pause();
+    if (previewMusic === m.id) { setPreviewMusic(null); return; }
+    previewRef.current = new Audio(m.url);
+    previewRef.current.volume = musicVol / 100;
+    previewRef.current.play();
+    setPreviewMusic(m.id);
+    previewRef.current.onended = () => setPreviewMusic(null);
+  };
+
+  // 再生
+  const togglePlay = () => {
+    if (playing) {
+      clearInterval(timerRef.current);
+      if (audioRef.current) audioRef.current.pause();
+      speechSynthesis.cancel();
+      setPlaying(false);
+    } else {
+      setPlaying(true);
+      if (music) {
+        audioRef.current = new Audio(music.url);
+        audioRef.current.volume = musicVol / 100;
+        audioRef.current.play();
+      }
+      let t = 0, lastIdx = -1;
+      timerRef.current = setInterval(() => {
+        t += 0.1;
+        if (t >= total) { t = 0; if (audioRef.current) audioRef.current.currentTime = 0; }
+        let e = 0;
+        for (let i = 0; i < scenes.length; i++) {
+          e += scenes[i].duration / scenes[i].speed;
+          if (t < e) {
+            if (i !== lastIdx) {
+              setIdx(i);
+              const n = narrations[scenes[i].id];
+              if (n) speak(n);
+              lastIdx = i;
+            }
+            break;
+          }
+        }
+      }, 100);
+    }
+  };
+
+  // シーン操作
+  const del = () => { setScenes(p => p.filter((_, i) => i !== idx)); setIdx(Math.max(0, idx - 1)); };
+  const dup = () => { const c = { ...scene, id: `s${Date.now()}`, stickers: [...scene.stickers] }; setScenes(p => [...p.slice(0, idx + 1), c, ...p.slice(idx + 1)]); };
+  const move = (d) => {
+    const ni = idx + d;
+    if (ni < 0 || ni >= scenes.length) return;
+    const arr = [...scenes];
+    [arr[idx], arr[ni]] = [arr[ni], arr[idx]];
+    setScenes(arr);
+    setIdx(ni);
+  };
+
+  useEffect(() => () => { clearInterval(timerRef.current); if (audioRef.current) audioRef.current.pause(); speechSynthesis.cancel(); }, []);
+
+  // --- UI ---
+  return (
+    <div className="min-h-screen text-white">
+      {/* UPLOAD */}
+      {step === 'upload' && (
+        <div className="p-4 pt-8 anim-fadeIn">
+          <div className="text-center mb-6">
+            <div className="text-4xl mb-2">🎬</div>
+            <h1 className="text-xl font-bold">ショート動画AI</h1>
+            <p className="text-white/60 text-sm mt-1">スマホで簡単プロ編集</p>
+          </div>
+          
+          <div onClick={() => fileRef.current?.click()} className="border-2 border-dashed border-white/30 rounded-2xl p-10 text-center mb-4">
+            <input ref={fileRef} type="file" accept="image/*,video/*" multiple onChange={onFiles} className="hidden" />
+            <div className="text-5xl mb-3">📁</div>
+            <p className="font-medium">タップして素材を選択</p>
+            <p className="text-white/50 text-sm mt-1">画像・動画</p>
+          </div>
+          
+          <div className="grid grid-cols-4 gap-2 mt-6">
+            {['🎙️ ナレーション','🎵 BGM','✨ エフェクト','😀 ステッカー'].map((t, i) => (
+              <div key={i} className="bg-white/5 rounded-xl p-3 text-center">
+                <div className="text-lg">{t.split(' ')[0]}</div>
+                <div className="text-[10px] text-white/60 mt-1">{t.split(' ')[1]}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* EDITOR */}
+      {step === 'edit' && scene && (
+        <div className="flex flex-col h-screen">
+          {/* Header */}
+          <div className="flex items-center justify-between px-3 py-2 bg-black/50">
+            <button onClick={() => setStep('upload')} className="p-2 text-white/70">← 戻る</button>
+            <span className="text-xs text-white/60">{scenes.length}シーン・{total.toFixed(1)}秒</span>
+            <button onClick={() => setShowExport(true)} className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-orange-500 to-red-500 text-sm font-medium">📤 書出</button>
+          </div>
+
+          {/* Preview */}
+          <div className="flex-shrink-0 px-4 py-2">
+            <div className="relative mx-auto w-full max-w-[200px] aspect-[9/16] rounded-2xl bg-black overflow-hidden border-2 border-white/20">
+              {/* Scene indicator */}
+              <div className="absolute top-2 left-2 right-2 flex gap-1 z-20">
+                {scenes.map((_, i) => <div key={i} className={`h-1 flex-1 rounded ${i === idx ? 'bg-white' : 'bg-white/30'}`} />)}
+              </div>
+              
+              {/* Media */}
+              <div className={`w-full h-full ${scene.filter !== 'none' ? `filter-${scene.filter}` : ''}`}>
+                {scene.media.type === 'video' ? (
+                  <video src={scene.media.url} className={`w-full h-full object-cover ${scene.effect !== 'none' ? `effect-${scene.effect}` : ''}`} muted loop playsInline autoPlay={playing} />
+                ) : (
+                  <img src={scene.media.url} className={`w-full h-full object-cover ${scene.effect !== 'none' ? `effect-${scene.effect}` : ''}`} />
+                )}
+              </div>
+              
+              {/* Text */}
+              {scene.text && (
+                <div className={`absolute inset-x-2 flex justify-center ${scene.textPos === 'top' ? 'top-10' : scene.textPos === 'bottom' ? 'bottom-6' : 'top-1/2 -translate-y-1/2'}`}>
+                  <p className={`px-2 py-1 rounded text-center font-bold ${scene.textAnim === 'glow' ? 'text-glow' : scene.textAnim === 'bounce' ? 'text-bounce' : ''}`} style={{ fontSize: scene.textSize, color: scene.textColor, textShadow: '1px 1px 4px rgba(0,0,0,0.8)' }}>
+                    {scene.text}
+                  </p>
+                </div>
+              )}
+              
+              {/* Stickers */}
+              {scene.stickers.map(st => (
+                <div key={st.id} className="absolute" style={{ left: `${st.x}%`, top: `${st.y}%`, fontSize: st.size, transform: 'translate(-50%,-50%)' }}>{st.emoji}</div>
+              ))}
+              
+              {/* Speed badge */}
+              {scene.speed !== 1 && <div className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded bg-black/60 text-[10px]">{scene.speed}x</div>}
+              
+              {/* Speaking indicator */}
+              {speaking && (
+                <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-0.5 items-end bg-black/60 px-2 py-1 rounded-full">
+                  {[1,2,3,4].map(i => <div key={i} className="w-1 bg-orange-500 rounded speaking-bar" style={{ animationDelay: `${i * 0.1}s` }} />)}
+                  <span className="text-[10px] ml-1">🎙️</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Play controls */}
+          <div className="flex items-center justify-center gap-4 py-2">
+            <button onClick={() => setIdx(Math.max(0, idx - 1))} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">⏮️</button>
+            <button onClick={togglePlay} className="w-14 h-14 rounded-full bg-gradient-to-r from-orange-500 to-red-500 flex items-center justify-center text-xl">
+              {playing ? '⏸️' : '▶️'}
+            </button>
+            <button onClick={() => setIdx(Math.min(scenes.length - 1, idx + 1))} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">⏭️</button>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-1 px-2 overflow-x-auto scrollbar-hide py-1">
+            {[
+              { id: 'effect', name: '✨ エフェクト' },
+              { id: 'text', name: '📝 テキスト' },
+              { id: 'voice', name: '🎙️ ナレーション' },
+              { id: 'sticker', name: '😀 ステッカー' },
+              { id: 'speed', name: '⏱️ スピード' },
+              { id: 'music', name: '🎵 BGM' },
+              { id: 'scene', name: '🎬 シーン' },
+            ].map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)} className={`px-3 py-1.5 rounded-lg whitespace-nowrap text-xs font-medium flex-shrink-0 ${tab === t.id ? 'bg-orange-500' : 'bg-white/10'}`}>
+                {t.name}
+              </button>
+            ))}
+          </div>
+
+          {/* Panel */}
+          <div className="flex-1 overflow-y-auto p-3 pb-6 mobile-scroll">
+            {/* Effect */}
+            {tab === 'effect' && (
+              <div className="space-y-3 anim-fadeIn">
+                <div className="bg-white/5 rounded-xl p-3">
+                  <p className="text-xs font-medium mb-2">🎥 モーション</p>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {EFFECTS.map(e => (
+                      <button key={e.id} onClick={() => update('effect', e.id)} className={`p-2 rounded-lg text-center ${scene.effect === e.id ? 'bg-orange-500/30 ring-2 ring-orange-400' : 'bg-white/5'}`}>
+                        <div className="text-lg">{e.icon}</div>
+                        <div className="text-[9px] mt-0.5">{e.name}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="bg-white/5 rounded-xl p-3">
+                  <p className="text-xs font-medium mb-2">🎨 フィルター</p>
+                  <div className="grid grid-cols-6 gap-1.5">
+                    {FILTERS.map(f => (
+                      <button key={f.id} onClick={() => update('filter', f.id)} className={`p-2 rounded-lg text-center ${scene.filter === f.id ? 'bg-orange-500/30 ring-2 ring-orange-400' : 'bg-white/5'}`}>
+                        <div className="text-lg">{f.icon}</div>
+                        <div className="text-[9px] mt-0.5">{f.name}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="bg-white/5 rounded-xl p-3">
+                  <p className="text-xs font-medium mb-2">⏱️ 表示時間: {scene.duration}秒</p>
+                  <input type="range" min="1" max="10" step="0.5" value={scene.duration} onChange={e => update('duration', parseFloat(e.target.value))} className="w-full" />
+                </div>
+              </div>
+            )}
+
+            {/* Text */}
+            {tab === 'text' && (
+              <div className="space-y-3 anim-fadeIn">
+                <div className="bg-white/5 rounded-xl p-3">
+                  <input type="text" value={scene.text} onChange={e => update('text', e.target.value)} placeholder="テキストを入力..." className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20" />
+                </div>
+                <div className="bg-white/5 rounded-xl p-3">
+                  <p className="text-xs font-medium mb-2">位置</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['top', 'center', 'bottom'].map(p => (
+                      <button key={p} onClick={() => update('textPos', p)} className={`py-2 rounded-lg text-sm ${scene.textPos === p ? 'bg-orange-500' : 'bg-white/10'}`}>
+                        {p === 'top' ? '上' : p === 'center' ? '中央' : '下'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="bg-white/5 rounded-xl p-3">
+                  <p className="text-xs font-medium mb-2">アニメーション</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[{id:'none',n:'なし'},{id:'glow',n:'グロー'},{id:'bounce',n:'バウンス'}].map(a => (
+                      <button key={a.id} onClick={() => update('textAnim', a.id)} className={`py-2 rounded-lg text-sm ${scene.textAnim === a.id ? 'bg-orange-500' : 'bg-white/10'}`}>{a.n}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="bg-white/5 rounded-xl p-3">
+                  <p className="text-xs font-medium mb-2">サイズ: {scene.textSize}px</p>
+                  <input type="range" min="12" max="40" value={scene.textSize} onChange={e => update('textSize', parseInt(e.target.value))} className="w-full" />
+                </div>
+              </div>
+            )}
+
+            {/* Voice */}
+            {tab === 'voice' && (
+              <div className="space-y-3 anim-fadeIn">
+                <div className="bg-white/5 rounded-xl p-3">
+                  <p className="text-xs font-medium mb-2">🎙️ このシーンのナレーション</p>
+                  <textarea value={narrations[scene.id] || ''} onChange={e => setNarrations(p => ({ ...p, [scene.id]: e.target.value }))} placeholder="読み上げテキスト..." className="w-full h-20 px-3 py-2 rounded-lg bg-white/10 border border-white/20 resize-none" />
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={() => speak(narrations[scene.id])} disabled={!narrations[scene.id]} className="flex-1 py-2 rounded-lg bg-orange-500 disabled:opacity-50 text-sm font-medium">
+                      {speaking ? '🔊 再生中...' : '▶️ 試聴'}
+                    </button>
+                    <button onClick={() => speechSynthesis.cancel()} className="px-4 py-2 rounded-lg bg-white/10 text-sm">⏹️</button>
+                  </div>
+                </div>
+                <div className="bg-white/5 rounded-xl p-3">
+                  <p className="text-xs font-medium mb-2">👤 音声タイプ</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {VOICES.map(v => (
+                      <button key={v.id} onClick={() => setVoice(v)} className={`p-2 rounded-lg text-center ${voice.id === v.id ? 'bg-orange-500/30 ring-2 ring-orange-400' : 'bg-white/10'}`}>
+                        <div className="text-xl">{v.icon}</div>
+                        <div className="text-[10px] mt-1">{v.name}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="bg-white/5 rounded-xl p-3">
+                  <p className="text-xs font-medium mb-2">🎭 話し方</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {STYLES.map(s => (
+                      <button key={s.id} onClick={() => setStyle(s)} className={`py-2 rounded-lg text-xs ${style.id === s.id ? 'bg-orange-500' : 'bg-white/10'}`}>{s.name}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Sticker */}
+            {tab === 'sticker' && (
+              <div className="space-y-3 anim-fadeIn">
+                {scene.stickers.length > 0 && (
+                  <div className="bg-white/5 rounded-xl p-3">
+                    <p className="text-xs font-medium mb-2">配置済み</p>
+                    <div className="flex flex-wrap gap-2">
+                      {scene.stickers.map(st => (
+                        <div key={st.id} className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/10">
+                          <span className="text-xl">{st.emoji}</span>
+                          <button onClick={() => update('stickers', scene.stickers.filter(s => s.id !== st.id))} className="text-red-400 text-xs">✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="bg-white/5 rounded-xl p-3">
+                  <p className="text-xs font-medium mb-2">タップして追加</p>
+                  <div className="flex flex-wrap gap-2">
+                    {STICKERS.map((s, i) => (
+                      <button key={i} onClick={() => addSticker(s)} className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center text-xl hover:bg-white/20">{s}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Speed */}
+            {tab === 'speed' && (
+              <div className="space-y-3 anim-fadeIn">
+                <div className="bg-white/5 rounded-xl p-3">
+                  <p className="text-xs font-medium mb-3">⏱️ 再生速度</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {SPEEDS.map(s => (
+                      <button key={s.id} onClick={() => update('speed', s.id)} className={`p-3 rounded-xl text-center ${scene.speed === s.id ? 'bg-orange-500/30 ring-2 ring-orange-400' : 'bg-white/10'}`}>
+                        <div className="text-2xl">{s.icon}</div>
+                        <div className="text-xs mt-1">{s.name}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="bg-white/5 rounded-xl p-3">
+                  <p className="text-sm">実際の再生時間: <span className="font-bold text-orange-400">{(scene.duration / scene.speed).toFixed(1)}秒</span></p>
+                </div>
+              </div>
+            )}
+
+            {/* Music */}
+            {tab === 'music' && (
+              <div className="space-y-3 anim-fadeIn">
+                {music && (
+                  <div className="bg-gradient-to-r from-orange-500/20 to-red-500/20 rounded-xl p-3 border border-orange-400/30">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-sm">🎵 {music.name}</p>
+                        <p className="text-[10px] text-white/60">{music.mood}</p>
+                      </div>
+                      <button onClick={() => setMusic(null)} className="p-1.5 rounded bg-white/10">✕</button>
+                    </div>
+                    <div className="mt-2">
+                      <p className="text-[10px] text-white/60 mb-1">音量: {musicVol}%</p>
+                      <input type="range" min="0" max="100" value={musicVol} onChange={e => setMusicVol(parseInt(e.target.value))} className="w-full" />
+                    </div>
+                  </div>
+                )}
+                <div className="bg-white/5 rounded-xl p-3 space-y-2">
+                  {MUSIC.map(m => (
+                    <div key={m.id} className={`flex items-center gap-2 p-2 rounded-lg ${music?.id === m.id ? 'bg-orange-500/20 ring-1 ring-orange-400' : 'bg-white/5'}`}>
+                      <button onClick={() => togglePreview(m)} className={`w-9 h-9 rounded-full flex items-center justify-center ${previewMusic === m.id ? 'bg-orange-500' : 'bg-white/20'}`}>
+                        {previewMusic === m.id ? '⏸️' : '▶️'}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{m.name}</p>
+                        <p className="text-[10px] text-white/60">{m.mood}</p>
+                      </div>
+                      <button onClick={() => setMusic(m)} className={`px-2 py-1 rounded text-xs ${music?.id === m.id ? 'bg-orange-500' : 'bg-white/10'}`}>
+                        {music?.id === m.id ? '✓' : '使用'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[10px] text-center text-white/40">🎵 著作権フリー音楽</p>
+              </div>
+            )}
+
+            {/* Scene */}
+            {tab === 'scene' && (
+              <div className="space-y-2 anim-fadeIn">
+                {scenes.map((s, i) => (
+                  <div key={s.id} onClick={() => setIdx(i)} className={`flex items-center gap-2 p-2 rounded-xl ${i === idx ? 'bg-orange-500/30 ring-2 ring-orange-400' : 'bg-white/5'}`}>
+                    <div className="w-10 h-16 rounded overflow-hidden bg-black flex-shrink-0">
+                      {s.media.type === 'video' ? <video src={s.media.url} className="w-full h-full object-cover" /> : <img src={s.media.url} className="w-full h-full object-cover" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium">シーン {i + 1}</p>
+                      <p className="text-[10px] text-white/60">{(s.duration / s.speed).toFixed(1)}秒{s.speed !== 1 ? ` (${s.speed}x)` : ''}</p>
+                      {narrations[s.id] && <p className="text-[10px] text-orange-400 truncate">🎙️ {narrations[s.id].slice(0, 12)}...</p>}
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex gap-1">
+                        <button onClick={e => { e.stopPropagation(); move(-1); }} disabled={i === 0} className="p-1 rounded bg-white/10 disabled:opacity-30 text-xs">↑</button>
+                        <button onClick={e => { e.stopPropagation(); move(1); }} disabled={i === scenes.length - 1} className="p-1 rounded bg-white/10 disabled:opacity-30 text-xs">↓</button>
+                      </div>
+                      <div className="flex gap-1">
+                        <button onClick={e => { e.stopPropagation(); dup(); }} className="p-1 rounded bg-white/10 text-xs">📋</button>
+                        <button onClick={e => { e.stopPropagation(); del(); }} className="p-1 rounded bg-red-500/20 text-red-400 text-xs">🗑️</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <button onClick={() => fileRef.current?.click()} className="w-full py-3 rounded-xl border-2 border-dashed border-white/30 text-white/60 text-sm">＋ 素材を追加</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Export Modal */}
+      {showExport && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 rounded-2xl p-5 w-full max-w-sm border border-white/10 anim-fadeIn">
+            <h3 className="text-lg font-bold mb-3 text-center">📤 動画を書き出し</h3>
+            <div className="bg-white/5 rounded-xl p-3 space-y-1 text-sm mb-4">
+              <p>📐 解像度: 1080 x 1920</p>
+              <p>🎬 シーン: {scenes.length}</p>
+              <p>⏱️ 長さ: {total.toFixed(1)}秒</p>
+              <p>🎵 BGM: {music ? music.name : 'なし'}</p>
+              <p>🎙️ ナレーション: {Object.keys(narrations).filter(k => narrations[k]).length}シーン</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setShowExport(false)} className="flex-1 py-3 rounded-xl bg-white/10 font-medium">キャンセル</button>
+              <button onClick={() => { alert('エクスポート機能はデモです'); setShowExport(false); }} className="flex-1 py-3 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 font-medium">書き出し</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <input ref={fileRef} type="file" accept="image/*,video/*" multiple onChange={onFiles} className="hidden" />
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
